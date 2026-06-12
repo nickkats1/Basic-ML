@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="card">
+        {% if error %}
+        <h1>Something went wrong</h1>
+        <p class="error">{{ error }}</p>
+        {% else %}
+        <h1>Predicted {{ target }}</h1>
+        <p class="prediction">{{ prediction }}</p>
+        {% endif %}
+        <a class="back" href="/">&larr; Make another prediction</a>
+    </main>
+</body>
+</html>
