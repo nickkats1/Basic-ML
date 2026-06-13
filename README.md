@@ -78,7 +78,3 @@ make train PROJECT=airplane && make docker-build PROJECT=airplane
 # or build & run every service (distinct ports 8081-8085):
 docker compose up --build
 ```
-
-## Note
-This repository is no longer actively maintained, but the projects are kept
-clean, tested, and reproducible.
