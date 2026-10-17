@@ -1,80 +1,117 @@
-# Sklearn Only
+# Basic ML
 
-A monorepo of small, self-contained scikit-learn projects. Each one is a full
-ML pipeline — data → preprocessing → model selection → evaluation → serving —
-built to a single consistent standard.
+Five projects exploring what tabular data can tell us about prices, lending decisions, default, and credit use. The work starts with the data: its distributions, missing values, relationships, and the choices needed to turn it into a modeling problem.
 
-## Rules
-- Rule #1: Every project must only contain scikit-learn models.
-- Rule #2: No NLP projects.
-- Rule #3: Every project must be a pipeline (data → preprocessing → model → evaluation → optionally deployment).
+The notebooks walk through those questions visually. The Python modules handle data preparation, model tuning, and evaluation, comparing linear models, trees, random forests, and boosting with scikit-learn, XGBoost, and LightGBM.
 
-## Projects
+## A look at the data
 
-| Project        | Task                         | Data source        | Serves            |
-|----------------|------------------------------|--------------------|-------------------|
-| `airplane`     | Regression (aircraft price)  | 3 remote CSVs      | predicted price   |
-| `houseprice`   | Regression (house price)     | local CSV          | predicted price   |
-| `utilization`  | Regression (credit util.)    | 3 remote CSVs      | predicted target  |
-| `creditrisk`   | Classification (default)     | remote CSV         | default probability |
-| `hmda`         | Classification (loan approval) | remote TSV       | approval probability |
+### House prices
 
-## Shared architecture
+Compare how sale prices vary with home size, pool availability, and bathrooms. The shaded bands show the middle 50% within size groups; size groups with fewer than 10 properties are omitted.
 
-Every project follows the same layout and conventions:
+[![House prices: size and pool comparison alongside price distributions by bathrooms](docs/figures/house-prices.png)](notebooks/_prices.ipynb)
 
-```
-<project>/
-├── helpers/
-│   ├── config.py      # typed, immutable Config dataclass + get_config() + joblib IO
-│   └── logger.py      # single configured logger
-├── src/
-│   ├── data/          # data_ingestion, feature_engineering (clean), data_transformation
-│   └── models/        # model_trainer, model_evaluation, predict
-├── tests/             # network-free pytest suite (synthetic fixtures)
-├── app.py             # Flask serving app (/, /predict, /health)
-├── main.py            # end-to-end training entry point
-├── Dockerfile         # slim, non-root, gunicorn, healthcheck
-├── requirements.txt   # runtime deps
-└── requirements-dev.txt
-```
+[Open the house-price notebook →](notebooks/_prices.ipynb)
 
-Engineering choices applied across all projects:
+### Boston HMDA
 
-- **Typed config, no YAML.** Configuration is a frozen `dataclass` validated at
-  construction; `get_config(**overrides)` supports test overrides and the
-  `MLFLOW_TRACKING_URI` / `MODEL_PATH` environment variables.
-- **Function modules, not stateful classes.** Pipeline stages are plain functions
-  taking `config`.
-- **One persisted pipeline.** All preprocessing (log scaling, standardization,
-  one-hot encoding) lives inside a single `sklearn.pipeline.Pipeline`, fit on the
-  training split only and persisted with the model — training and serving apply
-  identical transforms to raw inputs.
-- **Experiment tracking.** Every candidate model is logged to a local MLflow
-  (SQLite) store with params, metrics, and the fitted pipeline; the best model is
-  chosen on a held-out split.
-- **Reproducible outputs.** Each run writes `artifacts/best_model.pkl`,
-  `artifacts/metrics.json`, and `artifacts/model_card.md`.
-- **Tested & linted.** Network-free pytest suites and `ruff`, gated by GitHub
-  Actions (`.github/workflows/ci.yml`).
+Read denial rates alongside group sizes and the overall rate. Credit-history categories are labeled directly, so the comparison does not depend on remembering survey codes.
 
-## Quickstart
+[![Mortgage denial rates by consumer history and adverse public credit record, with group sizes and overall rates](docs/figures/hmda-credit-history.png)](notebooks/_hmda.ipynb)
+
+[Open the HMDA notebook →](notebooks/_hmda.ipynb)
+
+### Credit risk
+
+Default rates rise from 21% to 52% across these loan-length groups. The second plot shows loan-amount distributions within each term, split by default outcome.
+
+[![Default rates by loan term and loan-amount distributions by outcome](docs/figures/credit-default.png)](notebooks/_credit.ipynb)
+
+[Open the credit-risk notebook →](notebooks/_credit.ipynb)
+
+### Credit utilization
+
+See the distribution of credit use, then compare utilization with FICO scores and late payments. Percentages show the share of available credit used, before the model's log-odds transformation.
+
+[![Credit utilization distribution and its relationship with credit score and late payments](docs/figures/credit-utilization.png)](notebooks/_utilization.ipynb)
+
+[Open the utilization notebook →](notebooks/_utilization.ipynb)
+
+### Airplane prices
+
+Explore sale prices against cruising speed and age, then compare the price spread across seating capacities.
+
+[![Aircraft prices by cruising speed and age, alongside price distributions by passenger seats](docs/figures/airplane-prices.png)](notebooks/_airplane.ipynb)
+
+[Open the airplane notebook →](notebooks/_airplane.ipynb)
+
+Figures redraw analyses from all five notebooks using the project data loaders. Boxplots hide outlier markers for readability. These are sample associations, not causal effects.
+
+## Explore the projects
+
+| Project | What you'll find | Notebook | Code |
+|---|---|---|---|
+| House prices | Property size, age, amenities, and location as predictors of sale price. | [Explore](notebooks/_prices.ipynb) | [Source](src/prices/) |
+| Boston HMDA | Mortgage approvals and denials, with analysis of credit history, income, assets, and PMI outcomes. | [Explore](notebooks/_hmda.ipynb) | [Source](src/hmda/) |
+| Credit risk | Applicant finances and credit history used to classify default. | [Explore](notebooks/_credit.ipynb) | [Source](src/credit/) |
+| Credit utilization | Application, credit-bureau, and neighborhood data joined to model how much available credit applicants use. | [Explore](notebooks/_utilization.ipynb) | [Source](src/utilization/) |
+| Airplane prices | Sales, specifications, and performance records joined to predict aircraft prices. | [Explore](notebooks/_airplane.ipynb) | [Source](src/airplane/) |
+
+Start with a notebook to see the data and analysis, then follow its source folder to see how the models are trained. The [HMDA project README](src/hmda/README.md) goes further into feature definitions, results, and interpretation.
+
+## Inside the code
+
+Each project follows the same small module layout:
+
+- `config.py` defines data sources, predictors, the target, and split settings.
+- `data_ingestion.py` loads the data; cleaning lives here or in `preprocessing.py`.
+- `model_registry.py` holds the estimators and hyperparameter search grids.
+- `main.py` runs the search and evaluates on a held-out test set using `metrics.py`.
+
+Regression searches select models by cross-validation mean squared error; classification searches use ROC AUC. Credit utilization is modeled as log-odds, so its regression errors are on that transformed scale.
+
+## Setup
+
+From the repository root:
 
 ```bash
-make install PROJECT=airplane     # deps
-make train   PROJECT=airplane     # ingest -> train -> evaluate (writes artifacts/)
-make serve   PROJECT=airplane     # gunicorn on :8080
-make test-all                     # pytest across every project
-make lint-all                     # ruff across every project
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Browse experiments with `mlflow ui` from inside a project (uses
-`sqlite:///mlflow.db`).
+House prices requires `data/dataset.csv`; HMDA requires `data/hmda.txt`. The other projects load CSVs from URLs defined in their configs.
 
-### Docker
+For notebooks:
 
 ```bash
-make train PROJECT=airplane && make docker-build PROJECT=airplane
-# or build & run every service (distinct ports 8081-8085):
-docker compose up --build
+pip install jupyter ipykernel matplotlib seaborn
 ```
+
+## Run
+
+```bash
+python -m src.prices.main
+python -m src.hmda.main
+python -m src.credit.main
+python -m src.utilization.main
+python -m src.airplane.main
+```
+
+Run one command for the project you want. Each prints its model-search and evaluation results.
+
+## Tests
+
+```bash
+pip install pytest
+python -m pytest
+```
+
+## Notes
+
+The house-price training script scales predictors before cross-validation, so validation folds share scaling statistics. HMDA includes underwriting fields that may only be available during the lending decision; its results do not establish performance at initial application.
+
+## License
+
+[MIT](LICENSE)
